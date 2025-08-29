@@ -77,22 +77,30 @@ function HomeContent() {
     }
   }, [searchParams])
 
-  // 监听模型变化，自动设置正确的模型类型
+  // 监听模型变化，自动设置正确的模型类型（优先使用自定义模型的明确类型）
   useEffect(() => {
-    // 检查是否为内置的DALL-E模型
+    // 1) 自定义模型优先：若匹配到自定义模型，则以其类型为准
+    const customModels = storage.getCustomModels()
+    const customModel = customModels.find(cm => cm.value === model)
+    if (customModel) {
+      setModelType(customModel.type)
+      return
+    }
+
+    // 2) 内置模型
     if (model === 'dall-e-3' || model === 'gpt-image-1') {
       setModelType(ModelType.DALLE)
-    } else if (model === 'sora_image' || model === 'gpt_4o_image') {
+      return
+    }
+    if (model === 'sora_image' || model === 'gpt_4o_image') {
       setModelType(ModelType.OPENAI)
-    } else if (model.startsWith('gemini')) {
+      return
+    }
+
+    // 3) 启发式（仅当既不是自定义也不是内置时）
+    if (typeof model === 'string' && model.startsWith('gemini')) {
       setModelType(ModelType.GEMINI)
-    } else {
-      // 检查是否为自定义模型
-      const customModels = storage.getCustomModels()
-      const customModel = customModels.find(cm => cm.value === model)
-      if (customModel) {
-        setModelType(customModel.type)
-      }
+      return
     }
   }, [model])
 
@@ -594,9 +602,15 @@ function HomeContent() {
                   <h3 className="font-medium">模型选择</h3>
                   <div className="flex gap-2 mb-2">
                     <Select 
-                      value={model} 
-                      onValueChange={(value: GenerationModel) => {
-                        setModel(value)
+                      value={(storage.getCustomModels().some(cm => cm.value === model && cm.type === modelType)) ? `${modelType}::${model}` : model}
+                      onValueChange={(value: string) => {
+                        if (typeof value === 'string' && value.includes('::')) {
+                          const [typeStr, modelVal] = value.split('::')
+                          setModel(modelVal as GenerationModel)
+                          setModelType(typeStr as unknown as ModelType)
+                        } else {
+                          setModel(value as GenerationModel)
+                        }
                       }}
                     >
                       <SelectTrigger className="flex-1">
@@ -618,9 +632,9 @@ function HomeContent() {
                             {storage.getCustomModels().map(customModel => (
                               <SelectItem 
                                 key={customModel.id} 
-                                value={customModel.value}
+                                value={`${customModel.type}::${customModel.value}`}
                               >
-                                {customModel.name} ({customModel.type === ModelType.DALLE ? "DALL-E" : "OpenAI"})
+                                {customModel.name} ({customModel.type === ModelType.DALLE ? "DALL-E" : customModel.type === ModelType.GEMINI ? "Gemini" : "OpenAI"})
                               </SelectItem>
                             ))}
                           </>

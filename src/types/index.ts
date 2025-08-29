@@ -22,7 +22,8 @@ export interface DalleImageData {
 // 模型类型枚举
 export enum ModelType {
   DALLE = 'dalle',
-  OPENAI = 'openai'
+  OPENAI = 'openai',
+  GEMINI = 'gemini'
 }
 
 // 自定义模型接口
@@ -34,7 +35,7 @@ export interface CustomModel {
   createdAt: string
 }
 
-export type GenerationModel = 'sora_image' | 'gpt_4o_image' | 'gpt-image-1' | 'dall-e-3' | string
+export type GenerationModel = 'sora_image' | 'gpt_4o_image' | 'gpt-image-1' | 'dall-e-3' | 'gemini-2.5-flash-image-preview' | string
 export type AspectRatio = '1:1' | '16:9' | '9:16'
 export type ImageSize = '1024x1024' | '1536x1024' | '1024x1536' | 'auto' | '1792x1024'
 

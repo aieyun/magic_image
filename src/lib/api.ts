@@ -176,6 +176,185 @@ export const api = {
     }
   },
 
+  generateGeminiImage: async (request: GenerateImageRequest): Promise<{ data: Array<{ url?: string, b64_json?: string }> }> => {
+    const config = storage.getApiConfig()
+    if (!config) {
+      showErrorToast("请先设置 API 配置")
+      throw new Error('请先设置 API 配置')
+    }
+
+    if (!config.key || !config.baseUrl) {
+      showErrorToast("API 配置不完整，请检查 API Key 和基础地址")
+      throw new Error('API 配置不完整')
+    }
+
+    const requestUrl = buildRequestUrl(config.baseUrl, `/v1beta/models/${request.model}:generateContent`)
+
+    const response = await fetch(requestUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.key}`
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: `请帮我画图：${request.prompt}`
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"]
+        }
+      })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      const errorMessage = errorData.message || errorData.error?.message || '生成图片失败'
+      const errorCode = errorData.code || errorData.error?.code
+      const fullError = `${errorMessage}${errorCode ? `\n错误代码: ${errorCode}` : ''}`
+      showErrorToast(fullError)
+      throw new Error(fullError)
+    }
+
+    const data = await response.json()
+    
+    // 转换 Gemini 响应格式为通用格式
+    const images: Array<{ url?: string, b64_json?: string }> = []
+    let textContent = ''
+    
+    if (data.candidates && data.candidates.length > 0) {
+      const candidate = data.candidates[0]
+      if (candidate.content && candidate.content.parts) {
+        candidate.content.parts.forEach((part: any) => {
+          if ((part.inlineData && part.inlineData.data) || (part.inline_data && part.inline_data.data)) {
+            const b64 = part.inlineData?.data || part.inline_data?.data
+            images.push({ b64_json: b64 })
+          }
+          if (part.text) {
+            textContent += String(part.text)
+          }
+        })
+      }
+    }
+
+    if (images.length === 0) {
+      const msg = textContent?.trim() ? `Gemini未返回图片：${textContent.trim()}` : 'Gemini未返回图片'
+      showErrorToast(msg)
+      throw new Error(msg)
+    }
+
+    return { data: images }
+  },
+
+  editGeminiImage: async (request: GenerateImageRequest): Promise<{ data: Array<{ url?: string, b64_json?: string }> }> => {
+    const config = storage.getApiConfig()
+    if (!config) {
+      showErrorToast("请先设置 API 配置")
+      throw new Error('请先设置 API 配置')
+    }
+
+    if (!config.key || !config.baseUrl) {
+      showErrorToast("API 配置不完整，请检查 API Key 和基础地址")
+      throw new Error('API 配置不完整')
+    }
+
+    if (!request.sourceImage) {
+      showErrorToast("请先上传图片")
+      throw new Error('请先上传图片')
+    }
+
+    try {
+      const requestUrl = buildRequestUrl(config.baseUrl, `/v1beta/models/${request.model}:generateContent`)
+
+      // 将 base64 图片转换为二进制数据
+      const base64Data = request.sourceImage.split(',')[1]
+      const binaryData = atob(base64Data)
+      const bytes = new Uint8Array(binaryData.length)
+      for (let i = 0; i < binaryData.length; i++) {
+        bytes[i] = binaryData.charCodeAt(i)
+      }
+
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.key}`
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `请帮我画图：${request.prompt}`
+                },
+                {
+                  inline_data: {
+                    mime_type: "image/png",
+                    data: base64Data
+                  }
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            responseModalities: ["TEXT", "IMAGE"]
+          }
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        const errorMessage = errorData.message || errorData.error?.message || '编辑图片失败'
+        const errorCode = errorData.code || errorData.error?.code
+        const fullError = `${errorMessage}${errorCode ? `\n错误代码: ${errorCode}` : ''}`
+        showErrorToast(fullError)
+        throw new Error(fullError)
+      }
+
+      const data = await response.json()
+      
+      // 转换 Gemini 响应格式为通用格式
+      const images: Array<{ url?: string, b64_json?: string }> = []
+      let textContent = ''
+      
+      if (data.candidates && data.candidates.length > 0) {
+        const candidate = data.candidates[0]
+        if (candidate.content && candidate.content.parts) {
+          candidate.content.parts.forEach((part: any) => {
+            if ((part.inlineData && part.inlineData.data) || (part.inline_data && part.inline_data.data)) {
+              const b64 = part.inlineData?.data || part.inline_data?.data
+              images.push({ b64_json: b64 })
+            }
+            if (part.text) {
+              textContent += String(part.text)
+            }
+          })
+        }
+      }
+
+      if (images.length === 0) {
+        const msg = textContent?.trim() ? `Gemini未返回图片：${textContent.trim()}` : 'Gemini未返回图片'
+        showErrorToast(msg)
+        throw new Error(msg)
+      }
+
+      return { data: images }
+    } catch (error) {
+      if (error instanceof Error) {
+        showErrorToast(error.message)
+        throw error
+      }
+      const errorMessage = '编辑图片失败'
+      showErrorToast(errorMessage)
+      throw new Error(errorMessage)
+    }
+  },
+
   generateStreamImage: async (request: GenerateImageRequest, callbacks: StreamCallback) => {
     const config = storage.getApiConfig()
     if (!config) {

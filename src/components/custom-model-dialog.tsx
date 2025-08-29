@@ -130,10 +130,11 @@ export function CustomModelDialog({ open, onOpenChange, onSelectModel }: CustomM
                   <SelectContent>
                     <SelectItem value={ModelType.DALLE}>DALL-E 格式</SelectItem>
                     <SelectItem value={ModelType.OPENAI}>OpenAI 格式</SelectItem>
+                    <SelectItem value={ModelType.GEMINI}>Gemini 格式</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-gray-500 mt-1">
-                  DALL-E格式：使用图像生成接口 | OpenAI格式：使用聊天接口
+                  DALL-E格式：使用图像生成接口 | OpenAI格式：使用聊天接口 | Gemini格式：使用Gemini图像生成接口
                 </p>
               </div>
               <Button onClick={handleAddModel}>

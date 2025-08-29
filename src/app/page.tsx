@@ -77,6 +77,23 @@ function HomeContent() {
     }
   }, [searchParams])
 
+  // 监听模型变化，自动设置正确的模型类型
+  useEffect(() => {
+    // 检查是否为内置的DALL-E模型
+    if (model === 'dall-e-3' || model === 'gpt-image-1') {
+      setModelType(ModelType.DALLE)
+    } else if (model === 'sora_image' || model === 'gpt_4o_image') {
+      setModelType(ModelType.OPENAI)
+    } else {
+      // 检查是否为自定义模型
+      const customModels = storage.getCustomModels()
+      const customModel = customModels.find(cm => cm.value === model)
+      if (customModel) {
+        setModelType(customModel.type)
+      }
+    }
+  }, [model])
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
     if (files && files.length > 0) {
@@ -482,12 +499,6 @@ function HomeContent() {
                       value={model} 
                       onValueChange={(value: GenerationModel) => {
                         setModel(value)
-                        // 为内置模型设置对应的模型类型
-                        if (value === 'dall-e-3' || value === 'gpt-image-1') {
-                          setModelType(ModelType.DALLE)
-                        } else {
-                          setModelType(ModelType.OPENAI)
-                        }
                       }}
                     >
                       <SelectTrigger className="flex-1">

@@ -84,6 +84,8 @@ function HomeContent() {
       setModelType(ModelType.DALLE)
     } else if (model === 'sora_image' || model === 'gpt_4o_image') {
       setModelType(ModelType.OPENAI)
+    } else if (model.startsWith('gemini')) {
+      setModelType(ModelType.GEMINI)
     } else {
       // 检查是否为自定义模型
       const customModels = storage.getCustomModels()
@@ -151,6 +153,7 @@ function HomeContent() {
 
     try {
       const isDalleModel = model === 'dall-e-3' || model === 'gpt-image-1' || modelType === ModelType.DALLE
+             const isGeminiModel = modelType === ModelType.GEMINI
       
       // 如果有多张源图片，将它们的信息添加到提示词中
       let enhancedPrompt = prompt.trim();
@@ -158,7 +161,7 @@ function HomeContent() {
         enhancedPrompt += `\n\n参考图片信息：上传了${sourceImages.length}张参考图片，第一张作为主要参考，其他图片作为额外参考。`;
       }
       
-      const finalPrompt = isDalleModel ? enhancedPrompt : `${enhancedPrompt}\n图片生成比例为：${aspectRatio}`
+      const finalPrompt = isDalleModel || isGeminiModel ? enhancedPrompt : `${enhancedPrompt}\n图片生成比例为：${aspectRatio}`
       
       if (isDalleModel) {
         if (isImageToImage) {
@@ -222,6 +225,95 @@ function HomeContent() {
               // 处理DALL-E返回的URL或base64图片
               const imageUrl = item.url || item.b64_json;
               // 如果是base64格式，添加data:image前缀(如果还没有)
+              if (imageUrl && item.b64_json && !isBase64Image(imageUrl)) {
+                return `data:image/png;base64,${imageUrl}`;
+              }
+              return imageUrl || ''; // 添加空字符串作为默认值
+            }).filter(url => url !== ''); // 过滤掉空链接
+            
+            setGeneratedImages(imageUrls)
+            
+            if (imageUrls.length > 0) {
+              storage.addToHistory({
+                id: uuidv4(),
+                prompt: finalPrompt,
+                url: imageUrls[0],
+                model,
+                createdAt: new Date().toISOString(),
+                aspectRatio: '1:1'
+              })
+            }
+          } catch (err) {
+            if (err instanceof Error) {
+              setError(err.message)
+            } else {
+              setError('生成图片失败，请重试')
+            }
+          }
+        }
+      } else if (isGeminiModel) {
+        if (isImageToImage) {
+          if (sourceImages.length === 0) {
+            throw new Error('请先上传图片')
+          }
+          
+          try {
+            // 使用 Gemini 的图生图接口
+            const response = await api.editGeminiImage({
+              prompt: finalPrompt,
+              model,
+              modelType,
+              sourceImage: sourceImages[0],
+              size,
+              n,
+              mask: maskImage || undefined,
+              quality
+            })
+            
+            const imageUrls = response.data.map(item => {
+              // 处理 Gemini 返回的 base64 图片
+              const imageUrl = item.url || item.b64_json;
+              // 如果是 base64 格式，添加 data:image 前缀(如果还没有)
+              if (imageUrl && item.b64_json && !isBase64Image(imageUrl)) {
+                return `data:image/png;base64,${imageUrl}`;
+              }
+              return imageUrl || ''; // 添加空字符串作为默认值
+            }).filter(url => url !== ''); // 过滤掉空链接
+            
+            setGeneratedImages(imageUrls)
+            
+            if (imageUrls.length > 0) {
+              storage.addToHistory({
+                id: uuidv4(),
+                prompt: finalPrompt,
+                url: imageUrls[0],
+                model,
+                createdAt: new Date().toISOString(),
+                aspectRatio: '1:1'
+              })
+            }
+          } catch (err) {
+            if (err instanceof Error) {
+              setError(err.message)
+            } else {
+              setError('生成图片失败，请重试')
+            }
+          }
+        } else {
+          try {
+            // 使用 Gemini 的文生图接口
+            const response = await api.generateGeminiImage({
+              prompt: finalPrompt,
+              model,
+              size,
+              n,
+              quality
+            })
+            
+            const imageUrls = response.data.map(item => {
+              // 处理 Gemini 返回的 base64 图片
+              const imageUrl = item.url || item.b64_json;
+              // 如果是 base64 格式，添加 data:image 前缀(如果还没有)
               if (imageUrl && item.b64_json && !isBase64Image(imageUrl)) {
                 return `data:image/png;base64,${imageUrl}`;
               }
@@ -469,7 +561,7 @@ function HomeContent() {
                   </div>
                 )}
 
-                {isImageToImage && sourceImages.length > 0 && (model === 'dall-e-3' || model === 'gpt-image-1' || modelType === ModelType.DALLE) && (
+                {isImageToImage && sourceImages.length > 0 && (model === 'dall-e-3' || model === 'gpt-image-1' || modelType === ModelType.DALLE || model === 'gemini-2.5-flash-image-preview' || modelType === ModelType.GEMINI) && (
                   <Button
                     variant="outline"
                     className="w-full"
@@ -509,6 +601,7 @@ function HomeContent() {
                         <SelectItem value="gpt_4o_image">GPT 4o_Image 模型</SelectItem>
                         <SelectItem value="gpt-image-1">GPT Image 1 模型</SelectItem>
                         <SelectItem value="dall-e-3">DALL-E 3 模型</SelectItem>
+                        <SelectItem value="gemini-2.5-flash-image-preview">Gemini 2.5 模型</SelectItem>
                         
                         {/* 显示自定义模型 */}
                         {storage.getCustomModels().length > 0 && (
@@ -537,11 +630,11 @@ function HomeContent() {
                       <Settings className="h-4 w-4" />
                     </Button>
                   </div>
-                  <p className="text-xs text-gray-500">模型类型: {modelType === ModelType.DALLE ? 'DALL-E格式' : 'OpenAI格式'}</p>
+                  <p className="text-xs text-gray-500">模型类型: {modelType === ModelType.DALLE ? 'DALL-E格式' : modelType === ModelType.GEMINI ? 'Gemini格式' : 'OpenAI格式'}</p>
                   <p className="text-xs text-gray-500">选择不同的AI模型可能会产生不同风格的图像结果</p>
                 </div>
 
-                {(model === 'dall-e-3' || model === 'gpt-image-1' || modelType === ModelType.DALLE) && (
+                {(model === 'dall-e-3' || model === 'gpt-image-1' || modelType === ModelType.DALLE || model === 'gemini-2.5-flash-image-preview' || modelType === ModelType.GEMINI) && (
                   <>
                     <div className="space-y-2">
                       <h3 className="font-medium">图片尺寸</h3>
